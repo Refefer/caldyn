@@ -109,5 +109,5 @@ mod expr;
 mod context;
 
 pub use error::Error;
-pub use expr::{Expr, eval, is_variable};
+pub use expr::{Expr, eval, is_variable, DefaultFMap, FMap};
 pub use context::Context;

@@ -6,8 +6,10 @@ use std::collections::BTreeMap;
 use error::Error;
 use context::Context;
 
+pub type Func = fn(f64) -> f64;
+
 lazy_static!{
-    static ref FUNCTIONS: BTreeMap<String, fn(f64) -> f64> = {
+    static ref FUNCTIONS: BTreeMap<String, Func> = {
         let mut map = BTreeMap::<String, fn(f64) -> f64>::new();
         map.insert("sqrt".into(), f64::sqrt);
         map.insert("cbrt".into(), f64::cbrt);
@@ -34,6 +36,36 @@ lazy_static!{
     };
 }
 
+/// Provides a default accessor for FMaps using builtins
+pub struct DefaultFMap;
+
+static DEFAULT_FMAP: DefaultFMap = DefaultFMap;
+
+/// Trait providing and describing a lookup map custom functions.
+pub trait FMap {
+    /// Indicates whether the FMap can provide a function for the
+    /// given key
+    fn is_function(&self, key: &str) -> bool;
+
+    /// Returns a function definition for a given string if able
+    fn get(&self, key: &str) -> Option<Func>;
+}
+
+
+impl FMap for DefaultFMap{
+    fn is_function(&self, key: &str) -> bool {
+        FUNCTIONS.contains_key(key)
+    }
+
+    fn get(&self, key: &str) -> Option<Func> {
+        if let Some(&f) = FUNCTIONS.get(key) {
+            Some(f)
+        } else {
+            None
+        }
+    }
+}
+
 /// Ast nodes for the expressions
 #[derive(Debug, Clone, PartialEq)]
 enum Ast {
@@ -58,12 +90,12 @@ enum Ast {
 impl Ast {
     /// Construct the AST for a vector of tokens in reverse polish notation.
     /// This function eats the tokens as it uses them
-    fn from_tokens(tokens: &mut Vec<Token>, context: &str) -> Result<Ast, Error> {
+    fn from_tokens<A: FMap>(tokens: &mut Vec<Token>, context: &str, funcs: &A) -> Result<Ast, Error> {
         if let Some(token) = tokens.pop() {
             match token {
                 Token::Value(value) => {
-                    if let Some(&func) = FUNCTIONS.get(&value) {
-                        let args = Box::new(try!(Ast::from_tokens(tokens, " in function call")));
+                    if let Some(func) = funcs.get(&value) {
+                        let args = Box::new(try!(Ast::from_tokens(tokens, " in function call", funcs)));
                         Ok(Ast::Function(func, args))
                     } else if let Ok(number) = value.parse() {
                         Ok(Ast::Value(number))
@@ -74,8 +106,8 @@ impl Ast {
                     }
                 }
                 Token::Op(op) => {
-                    let right = Box::new(try!(Ast::from_tokens(tokens, " after operator")));
-                    let left = Box::new(try!(Ast::from_tokens(tokens, " befor operator")));
+                    let right = Box::new(try!(Ast::from_tokens(tokens, " after operator", funcs)));
+                    let left = Box::new(try!(Ast::from_tokens(tokens, " befor operator", funcs)));
                     match op {
                         Op::Plus => Ok(Ast::Add(left, right)),
                         Op::Minus => Ok(Ast::Sub(left, right)),
@@ -203,7 +235,8 @@ pub struct Expr {
 }
 
 impl Expr {
-    /// Parse the given mathematical `expression` into an `Expr`.
+    /// Parse the given mathematical `expression` into an `Expr` using the 
+    /// default FMap.
     ///
     /// # Examples
     /// ```
@@ -214,13 +247,26 @@ impl Expr {
     /// assert!(Expr::parse("3eff + 5 * 2").is_err());
     /// ```
     pub fn parse(expression: &str) -> Result<Expr, Error> {
+        Expr::parse_fns(expression, &DEFAULT_FMAP)
+    }
+
+    /// Parse the given mathematical `expression` into an `Expr`, resolving 
+    /// functions with the provided FMap.
+    ///
+    /// # Examples
+    /// ```
+    /// # use caldyn::{Expr,DefaultFMap};
+    /// // A valid expression
+    /// assert!(Expr::parse_fns("1 + 2 * 3", &DefaultFMap).is_ok());
+    /// ```
+    pub fn parse_fns<A:FMap>(expression: &str, funcs: &A) -> Result<Expr, Error> {
         let mut lexer = Lexer::new(expression);
         let mut output = Vec::new();
         let mut operators = Vec::new();
 
         'tokens: while let Some(token) = try!(lexer.next_token()) {
             match token {
-                Token::Value(ref name) if FUNCTIONS.contains_key(name) => {
+                Token::Value(ref name) if funcs.is_function(name) => {
                     operators.push(token.clone());
                 }
                 Token::Value(_) => output.push(token),
@@ -248,7 +294,7 @@ impl Expr {
                         match token {
                             Token::LParen => {
                                 let next_is_fn = if let Some(&Token::Value(ref name)) = operators.last() {
-                                    FUNCTIONS.contains_key(name)
+                                    funcs.is_function(name)
                                 } else {
                                     false
                                 };
@@ -275,7 +321,7 @@ impl Expr {
             }
         }
 
-        let ast = try!(Ast::from_tokens(&mut output, ""));
+        let ast = try!(Ast::from_tokens(&mut output, "", funcs));
         if output.is_empty() {
             Ok(Expr { ast: ast.optimize() })
         } else {
@@ -597,5 +643,34 @@ mod tests {
 
         let Expr { ast } = Expr::parse("sqrt(9)").unwrap();
         assert_eq!(ast.value(), Some(3.0));
+    }
+
+    fn make_one(_x: f64) -> f64 {
+        1f64
+    }
+
+    // Tests a custom FMap
+    struct SimpleFMap;
+
+    impl FMap for SimpleFMap {
+        fn is_function(&self, key: &str) -> bool {
+            key == "foo"
+        }
+
+        fn get(&self, key: &str) -> Option<Func> {
+            if key == "foo" {
+                Some(make_one)
+            } else {
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn custom_fmap() {
+        let fmap = SimpleFMap;
+        let ctx = Context::new();
+        let expr = Expr::parse_fns("2 + 3 + foo(0)", &fmap).unwrap();
+        assert_eq!(expr.eval(&ctx), Ok(6f64));
     }
 }
