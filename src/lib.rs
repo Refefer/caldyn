@@ -107,7 +107,9 @@ extern crate lazy_static;
 mod error;
 mod expr;
 mod context;
+mod fmap;
 
 pub use error::Error;
-pub use expr::{Expr, eval, is_variable, DefaultFMap, FMap};
+pub use fmap::{DefaultFMap, FMap, Func};
+pub use expr::{Expr, eval, is_variable};
 pub use context::Context;
