@@ -161,6 +161,7 @@ impl Ast {
         use self::Ast::*;
         match self {
             &Variable(ref v) => { varset.insert(v.clone()); },
+            &Function(_, ref arg) => { arg.vars(varset) },
             &Add(ref l, ref r) | &Sub(ref l, ref r) | &Mul(ref l, ref r) 
                                | &Div(ref l, ref r) | &Exp(ref l, ref r) => {
                 l.vars(varset);
@@ -317,7 +318,7 @@ impl Expr {
     /// vs.insert("x".into());
     /// vs.insert("y".into());
     /// 
-    /// let expr = Expr::parse("x ^ y + 1").unwrap();
+    /// let expr = Expr::parse("x + ln(y) + 1").unwrap();
     /// let found = expr.vars();
     /// assert_eq!(vs, found);
     pub fn vars(&self) -> HashSet<String> {
