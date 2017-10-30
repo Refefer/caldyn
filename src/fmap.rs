@@ -31,14 +31,14 @@ lazy_static!{
     };
 }
 
-/// Provides a default accessor for FMaps using builtins
-pub struct DefaultFMap;
+/// Provides a default accessor for FResolvs using builtins
+pub struct DefaultFResolv;
 
-pub static DEFAULT_FMAP: DefaultFMap = DefaultFMap;
+pub static DEFAULT_FMAP: DefaultFResolv = DefaultFResolv;
 
 /// Trait providing and describing a lookup map custom functions.
-pub trait FMap {
-    /// Indicates whether the FMap can provide a function for the
+pub trait FResolv {
+    /// Indicates whether the FResolv can provide a function for the
     /// given key
     fn is_function(&self, key: &str) -> bool;
 
@@ -47,7 +47,7 @@ pub trait FMap {
 }
 
 
-impl FMap for DefaultFMap{
+impl FResolv for DefaultFResolv{
     fn is_function(&self, key: &str) -> bool {
         FUNCTIONS.contains_key(key)
     }
@@ -62,9 +62,9 @@ impl FMap for DefaultFMap{
 }
 
 /// Simple struct for having multiple layers of resolution
-pub struct FMapSet(Vec<Box<FMap>>);
+pub struct FResolvSet(Vec<Box<FResolv>>);
 
-impl FMap for FMapSet {
+impl FResolv for FResolvSet {
 
     fn is_function(&self, key: &str) -> bool {
         for fm in self.0.iter() {

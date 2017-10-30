@@ -1,8 +1,9 @@
 use std::str::Chars;
 use std::iter::Peekable;
 use std::ascii::AsciiExt;
+use std::collections::HashSet;
 
-use fmap::{DEFAULT_FMAP, FMap};
+use fmap::{DEFAULT_FMAP, FResolv};
 use error::Error;
 use context::Context;
 
@@ -30,7 +31,7 @@ enum Ast {
 impl Ast {
     /// Construct the AST for a vector of tokens in reverse polish notation.
     /// This function eats the tokens as it uses them
-    fn from_tokens<A: FMap>(tokens: &mut Vec<Token>, context: &str, funcs: &A) -> Result<Ast, Error> {
+    fn from_tokens<A: FResolv>(tokens: &mut Vec<Token>, context: &str, funcs: &A) -> Result<Ast, Error> {
         if let Some(token) = tokens.pop() {
             match token {
                 Token::Value(value) => {
@@ -154,6 +155,20 @@ impl Ast {
             }
         }
     }
+
+    /// Returns the set of variables needed to evalute this AST
+    fn vars(&self, varset: &mut HashSet<String>) {
+        use self::Ast::*;
+        match self {
+            &Variable(ref v) => { varset.insert(v.clone()); },
+            &Add(ref l, ref r) | &Sub(ref l, ref r) | &Mul(ref l, ref r) 
+                               | &Div(ref l, ref r) | &Exp(ref l, ref r) => {
+                l.vars(varset);
+                r.vars(varset);
+            },
+            _ => ()
+        };
+    }
 }
 
 /// A parsed and optimized mathematical expression.
@@ -176,7 +191,7 @@ pub struct Expr {
 
 impl Expr {
     /// Parse the given mathematical `expression` into an `Expr` using the 
-    /// default FMap.
+    /// default FResolv.
     ///
     /// # Examples
     /// ```
@@ -191,15 +206,15 @@ impl Expr {
     }
 
     /// Parse the given mathematical `expression` into an `Expr`, resolving 
-    /// functions with the provided FMap.
+    /// functions with the provided FResolv.
     ///
     /// # Examples
     /// ```
-    /// # use caldyn::{Expr,DefaultFMap};
+    /// # use caldyn::{Expr,DefaultFResolv};
     /// // A valid expression
-    /// assert!(Expr::parse_fns("1 + 2 * 3", &DefaultFMap).is_ok());
+    /// assert!(Expr::parse_fns("1 + 2 * 3", &DefaultFResolv).is_ok());
     /// ```
-    pub fn parse_fns<A:FMap>(expression: &str, funcs: &A) -> Result<Expr, Error> {
+    pub fn parse_fns<A:FResolv>(expression: &str, funcs: &A) -> Result<Expr, Error> {
         let mut lexer = Lexer::new(expression);
         let mut output = Vec::new();
         let mut operators = Vec::new();
@@ -291,6 +306,24 @@ impl Expr {
         C: Into<Option<&'a Context<'a>>>,
     {
         self.ast.eval(context.into())
+    }
+
+    /// Returns the set of variables found within the expression
+    /// # Examples
+    /// ```
+    /// # use caldyn::Expr;
+    /// # use std::collections::HashSet;
+    /// let mut vs = HashSet::new();
+    /// vs.insert("x".into());
+    /// vs.insert("y".into());
+    /// 
+    /// let expr = Expr::parse("x ^ y + 1").unwrap();
+    /// let found = expr.vars();
+    /// assert_eq!(vs, found);
+    pub fn vars(&self) -> HashSet<String> {
+        let mut set = HashSet::new();
+        self.ast.vars(&mut set);
+        set
     }
 }
 
@@ -575,6 +608,11 @@ mod tests {
     }
 
     #[test]
+    fn bad_input() {
+        assert_eq!(super::eval("log10(-1)", None).map(|x| x.is_nan()), Ok(true))
+    }
+
+    #[test]
     fn optimize() {
         let Expr { ast } = Expr::parse("3 + 5").unwrap();
         assert_eq!(ast.value(), Some(8.0));
@@ -590,26 +628,25 @@ mod tests {
         1f64
     }
 
-    // Tests a custom FMap
-    struct SimpleFMap;
+    // Tests a custom FResolv
+    struct SimpleFResolv;
 
-    impl FMap for SimpleFMap {
+    impl FResolv for SimpleFResolv {
         fn is_function(&self, key: &str) -> bool {
             key == "foo"
         }
 
         fn get(&self, key: &str) -> Option<Func> {
             if key == "foo" {
-                Some(make_one)
-            } else {
-                None
-            }
+                return Some(make_one)
+            } 
+            None
         }
     }
 
     #[test]
     fn custom_fmap() {
-        let fmap = SimpleFMap;
+        let fmap = SimpleFResolv;
         let ctx = Context::new();
         let expr = Expr::parse_fns("2 + 3 + foo(0)", &fmap).unwrap();
         assert_eq!(expr.eval(&ctx), Ok(6f64));
