@@ -2,7 +2,7 @@ use std::str::Chars;
 use std::iter::Peekable;
 use std::ascii::AsciiExt;
 
-use fmap::{DEFAULT_FMAP, FMap, Func};
+use fmap::{DEFAULT_FMAP, FMap};
 use error::Error;
 use context::Context;
 
@@ -462,6 +462,7 @@ where
 mod tests {
     use super::*;
     use std::error::Error;
+    use fmap::Func;
 
     #[test]
     fn idents() {

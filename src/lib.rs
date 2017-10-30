@@ -110,6 +110,6 @@ mod context;
 mod fmap;
 
 pub use error::Error;
-pub use fmap::{DefaultFMap, FMap, Func};
+pub use fmap::{DefaultFMap, FMap, Func, FMapSet};
 pub use expr::{Expr, eval, is_variable};
 pub use context::Context;

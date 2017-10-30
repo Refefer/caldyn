@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+/// Alias for simple one-arity functions
 pub type Func = fn(f64) -> f64;
 
 lazy_static!{
@@ -60,4 +61,27 @@ impl FMap for DefaultFMap{
     }
 }
 
+/// Simple struct for having multiple layers of resolution
+pub struct FMapSet(Vec<Box<FMap>>);
 
+impl FMap for FMapSet {
+
+    fn is_function(&self, key: &str) -> bool {
+        for fm in self.0.iter() {
+            if fm.is_function(key) {
+                return true;
+            }
+        }
+        return false
+    }
+
+    fn get(&self, key: &str) -> Option<Func> {
+        for fm in self.0.iter() {
+            if let Some(f) = fm.get(key) {
+                return Some(f)
+            }
+        }
+        None
+    }
+
+}
