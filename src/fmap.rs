@@ -47,7 +47,7 @@ pub trait FResolv {
 }
 
 
-impl FResolv for DefaultFResolv{
+impl FResolv for DefaultFResolv {
     fn is_function(&self, key: &str) -> bool {
         FUNCTIONS.contains_key(key)
     }
@@ -62,7 +62,7 @@ impl FResolv for DefaultFResolv{
 }
 
 /// Simple struct for having multiple layers of resolution
-pub struct FResolvSet(Vec<Box<FResolv>>);
+pub struct FResolvSet(pub Vec<Box<FResolv>>);
 
 impl FResolv for FResolvSet {
 
